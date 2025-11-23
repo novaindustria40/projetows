@@ -1,5 +1,5 @@
 # setup.ps1
-# Script para configurar o ambiente de um servidor Windows para a aplicação ZapScale.
+# Script para configurar o ambiente de um servidor Windows para a aplicação projetows.
 
 # Define a política de execução para permitir scripts
 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force

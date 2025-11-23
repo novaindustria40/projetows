@@ -10,7 +10,7 @@ const { User, Campaign, ContactList, Message, MessageTemplate } = require('./mod
 const whatsappService = require('./services/whatsapp');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 80;
 
 // Middleware
 app.use(cors());
