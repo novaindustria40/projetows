@@ -15,7 +15,7 @@ fi
 echo "Iniciando o processo de build e deploy..."
 
 # Para e remove um container antigo com o mesmo nome, se existir
-if [ $(docker ps -a -q -f name=^/${CONTAINER_NAME}$)) ]; then
+if [ "$(docker ps -a -q -f name=^/${CONTAINER_NAME}$)" ]; then
     echo "Parando e removendo container antigo..."
     docker stop ${CONTAINER_NAME}
     docker rm ${CONTAINER_NAME}
@@ -23,7 +23,7 @@ fi
 
 echo "Construindo a nova imagem Docker..."
 # Constrói a imagem Docker a partir do Dockerfile no diretório atual
-docker build -t ${APP_NAME} .
+docker build -f ./Dockerfile -t ${APP_NAME} .
 
 echo "Iniciando o novo container..."
 

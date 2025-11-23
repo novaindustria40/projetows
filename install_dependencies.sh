@@ -1,20 +1,19 @@
 #!/bin/bash
 set -e
 
-# Atualiza os pacotes da instância
-sudo yum update -y
+# Atualiza a lista de pacotes do Ubuntu
+sudo apt-get update -y
 
-# Instala o Git
-sudo yum install -y git
+# Instala dependências básicas e o Docker
+sudo apt-get install -y git docker.io
 
-# Instala o Docker
-sudo yum install -y docker
+# Inicia e habilita o serviço do Docker para iniciar com o sistema
+sudo systemctl start docker
+sudo systemctl enable docker
 
-# Inicia o serviço do Docker
-sudo service docker start
-
-# Adiciona o usuário ec2-user ao grupo do docker para que você possa executar comandos docker sem usar sudo
-sudo usermod -a -G docker ec2-user
+# Adiciona o usuário 'ubuntu' (padrão do EC2 Ubuntu) ao grupo do docker
+# para que você possa executar comandos docker sem usar sudo
+sudo usermod -aG docker ubuntu
 
 echo "================================================================================"
 echo "Docker e Git foram instalados com sucesso."

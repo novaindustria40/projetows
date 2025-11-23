@@ -6,6 +6,8 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
+const bcrypt = require('bcrypt');
+const { body, validationResult } = require('express-validator');
 const { User, Campaign, ContactList, Message, MessageTemplate } = require('./models');
 const whatsappService = require('./services/whatsapp');
 
@@ -70,6 +72,97 @@ whatsappService.on('message_ack', async ({ msg, ack }) => {
 
 // --- API Routes ---
 const apiRouter = express.Router();
+
+// --- Auth Routes ---
+const authRouter = express.Router();
+
+// POST /api/auth/register
+authRouter.post(
+  '/register',
+  [
+    body('email').isEmail().withMessage('Please enter a valid email'),
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
+    body('name').not().isEmpty().withMessage('Name is required'),
+    body('companyName').not().isEmpty().withMessage('Company name is required'),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { email, password, name, companyName } = req.body;
+
+    try {
+      let user = await User.findOne({ email });
+      if (user) {
+        return res.status(400).json({ errors: [{ msg: 'User already exists' }] });
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      user = new User({
+        name,
+        email,
+        companyName,
+        password: hashedPassword,
+      });
+
+      await user.save();
+      
+      const userResponse = user.toObject();
+      delete userResponse.password;
+
+      res.status(201).json(userResponse);
+
+    } catch (err) {
+      console.error(err.message);
+      res.status(500).send('Server error');
+    }
+  }
+);
+
+// POST /api/auth/login
+authRouter.post(
+  '/login',
+  [
+    body('email').isEmail().withMessage('Please enter a valid email'),
+    body('password').exists().withMessage('Password is required'),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { email, password } = req.body;
+
+    try {
+      const user = await User.findOne({ email });
+      if (!user) {
+        return res.status(400).json({ errors: [{ msg: 'Invalid credentials' }] });
+      }
+
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        return res.status(400).json({ errors: [{ msg: 'Invalid credentials' }] });
+      }
+      
+      const userResponse = user.toObject();
+      delete userResponse.password;
+
+      res.json(userResponse);
+
+    } catch (err) {
+      console.error(err.message);
+      res.status(500).send('Server error');
+    }
+  }
+);
+
+apiRouter.use('/auth', authRouter);
+// --- End Auth Routes ---
 
 // Setup uploads directory
 const uploadDir = path.resolve(__dirname, '..', 'uploads');

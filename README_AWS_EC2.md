@@ -1,6 +1,6 @@
-# Roteiro de Implantação: ZapScale na AWS EC2 (Amazon Linux)
+# Roteiro de Implantação: ZapScale na AWS EC2 (Ubuntu)
 
-Este guia descreve o processo passo a passo para implantar a aplicação ZapScale em uma instância EC2 da AWS utilizando Amazon Linux, Docker e Git.
+Este guia descreve o processo passo a passo para implantar a aplicação ZapScale em uma instância EC2 da AWS utilizando Ubuntu, Docker e Git.
 
 ## Pré-requisitos
 
@@ -14,8 +14,8 @@ Este guia descreve o processo passo a passo para implantar a aplicação ZapScal
 
 1.  **Acesse o Console da AWS** e navegue até o serviço **EC2**.
 2.  Clique em **"Launch instances"**.
-3.  **Nome**: Dê um nome à sua instância (ex: `zapscale-server`).
-4.  **Application and OS Images**: Selecione **Amazon Linux**. A AMI `Amazon Linux 2023` (ou mais recente) é recomendada.
+3.  **Nome**: Dê um nome à sua instância (ex: `zapscale-server-ubuntu`).
+4.  **Application and OS Images**: Selecione **Ubuntu**. A AMI `Ubuntu` LTS (ex: 22.04) é recomendada.
 5.  **Instance type**: Escolha um tipo de instância. `t2.micro` ou `t3.micro` são suficientes para começar.
 6.  **Key pair (login)**: Selecione o par de chaves SSH que você criou ou crie um novo. **Não perca este arquivo `.pem`!**
 7.  **Network settings**:
@@ -41,12 +41,12 @@ Este guia descreve o processo passo a passo para implantar a aplicação ZapScal
 1.  Aguarde a instância estar no estado **"Running"**.
 2.  Selecione a instância no console EC2 e copie seu **Public IPv4 address**.
 3.  Abra um terminal ou PowerShell no seu computador.
-4.  Use o comando SSH para conectar. O usuário padrão para Amazon Linux é `ec2-user`.
+4.  Use o comando SSH para conectar. O usuário padrão para Ubuntu é `ubuntu`.
 
     ```bash
     # Substitua 'caminho/para/sua-chave.pem' pelo caminho real do seu arquivo .pem
     # Substitua 'seu_ip_publico' pelo endereço IP público da sua instância
-    ssh -i "caminho/para/sua-chave.pem" ec2-user@seu_ip_publico
+    ssh -i "caminho/para/sua-chave.pem" ubuntu@seu_ip_publico
     ```
 
 5.  Você estará conectado ao terminal da sua instância EC2.
@@ -57,7 +57,7 @@ Este guia descreve o processo passo a passo para implantar a aplicação ZapScal
 
 Uma vez conectado à instância, você precisa instalar as dependências necessárias (Git e Docker).
 
-1.  Execute o script `install_dependencies.sh` que será criado. Para isso, primeiro crie o arquivo na instância:
+1.  Execute o script `install_dependencies.sh` (que já atualizamos para Ubuntu). Para isso, primeiro crie o arquivo na instância:
     ```bash
     nano install_dependencies.sh
     ```
@@ -70,10 +70,10 @@ Uma vez conectado à instância, você precisa instalar as dependências necess�
     ```bash
     ./install_dependencies.sh
     ```
-5.  **IMPORTANTE**: Para que as permissões do Docker para o `ec2-user` tenham efeito, saia da sessão SSH e conecte-se novamente.
+5.  **IMPORTANTE**: Para que as permissões do Docker para o `ubuntu` tenham efeito, saia da sessão SSH e conecte-se novamente.
     ```bash
     exit
-    ssh -i "caminho/para/sua-chave.pem" ec2-user@seu_ip_publico
+    ssh -i "caminho/para/sua-chave.pem" ubuntu@seu_ip_publico
     ```
 6.  Verifique se o Docker está funcionando sem `sudo`:
     ```bash

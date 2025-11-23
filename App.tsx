@@ -8,6 +8,10 @@ import Messages from './pages/Messages';
 import Campaigns from './pages/Campaigns';
 import Settings from './pages/Settings';
 import Connection from './pages/Connection';
+import Login from './pages/Login';
+import Register from './pages/Register';
+
+type AuthView = 'login' | 'register';
 
 const App: React.FC = () => {
   const [view, setView] = useState<AppView>(AppView.DASHBOARD);
@@ -15,12 +19,21 @@ const App: React.FC = () => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   
   const [categories, setCategories] = useState<string[]>(['Promocional', 'Informativo', 'Cobrança', 'Saudação', 'Aniversário']);
-  const [user, setUser] = useState<User | null>({
-    id: '1',
-    name: 'ZapScale User',
-    email: 'user@zapscale.com',
-    companyName: 'ZapScale Inc.'
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [authView, setAuthView] = useState<AuthView>('login');
+
+  // Check for user in localStorage on initial load
+  useEffect(() => {
+    try {
+      const storedUser = localStorage.getItem('zapscale-user');
+      if (storedUser) {
+        setUser(JSON.parse(storedUser));
+      }
+    } catch (error) {
+      console.error("Failed to parse user from localStorage", error);
+      localStorage.removeItem('zapscale-user');
+    }
+  }, []);
 
   useEffect(() => {
     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
@@ -39,15 +52,25 @@ const App: React.FC = () => {
 
   const toggleTheme = () => setIsDark(!isDark);
 
+  const handleLogin = (loggedInUser: User) => {
+    localStorage.setItem('zapscale-user', JSON.stringify(loggedInUser));
+    setUser(loggedInUser);
+  };
+
+  const handleRegister = (registeredUser: User) => {
+    // Automatically log in the user after registration
+    localStorage.setItem('zapscale-user', JSON.stringify(registeredUser));
+    setUser(registeredUser);
+  };
+
   const handleLogout = () => {
-    // In a real app, this would call an API
-    setUser(null); 
-    // Redirect or show login
-    window.location.reload();
+    localStorage.removeItem('zapscale-user');
+    setUser(null);
+    setView(AppView.DASHBOARD); // Reset view on logout
   };
 
   const renderContent = () => {
-    if (!user) return <Connection />; // Default to connection page if no user
+    if (!user) return null; // Should not happen if this component is rendered
     
     switch (view) {
       case AppView.DASHBOARD: return <Dashboard user={user} />;
@@ -61,18 +84,15 @@ const App: React.FC = () => {
     }
   };
 
-  // If there's no user, we can assume we need to connect.
-  // This simplifies the logic without a full auth system.
+  // If there's no user, show Login or Register page
   if (!user) {
-    return (
-        <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
-            <div className="p-4 md:p-8">
-                <Connection />
-            </div>
-        </div>
-    );
+    if (authView === 'login') {
+      return <Login onLogin={handleLogin} onSwitchToRegister={() => setAuthView('register')} />;
+    }
+    return <Register onRegister={handleRegister} onSwitchToLogin={() => setAuthView('login')} />;
   }
 
+  // If there is a user, show the main application
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 overflow-hidden">
       {isMobileOpen && (
