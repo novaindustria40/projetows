@@ -380,9 +380,16 @@ app.get('/health', (req, res) => {
 
 // --- Static Files & SPA Fallback ---
 const rootDir = path.resolve(__dirname, '..');
-app.use(express.static(rootDir));
+const distDir = path.join(rootDir, 'dist');
 
-// Serve uploaded media files
+// If a production build exists in `dist`, serve it. Otherwise fall back to project root.
+if (fs.existsSync(distDir)) {
+  app.use(express.static(distDir));
+} else {
+  app.use(express.static(rootDir));
+}
+
+// Serve uploaded media files (always from uploads folder)
 app.use('/uploads', express.static(uploadDir));
 
 // SPA Fallback - MUST be last
@@ -391,7 +398,12 @@ app.get('*', (req, res) => {
   if (req.headers.accept && req.headers.accept.includes('application/json')) {
     return res.status(404).json({ error: 'Not Found' });
   }
-  res.sendFile(path.join(rootDir, 'index.html'));
+
+  const indexPath = fs.existsSync(distDir)
+    ? path.join(distDir, 'index.html')
+    : path.join(rootDir, 'index.html');
+
+  res.sendFile(indexPath);
 });
 
 // --- Scheduler ---
