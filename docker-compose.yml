@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend.Dockerfile
+    ports:
+      - "3001:3001"
+    volumes:
+      # Mount a volume to persist WhatsApp session data
+      - ./server/.wwebjs_auth:/usr/src/app/.wwebjs_auth
+      # Mount a volume to persist file uploads
+      - ./uploads:/usr/src/app/uploads
+    environment:
+      # This URI points to the 'mongo' service defined below
+      - MONGODB_URI=mongodb://mongo:27017/zapscale
+      - PORT=3001
+      # IMPORTANT: Add your Gemini API key here before running
+      - GEMINI_API_KEY=SUA_CHAVE_API_GEMINI_AQUI
+    depends_on:
+      - mongo
+    # Keep the container running and restart on failure
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      # Persist MongoDB data
+      - mongo-data:/data/db
+    restart: unless-stopped
+
+  mongo-express:
+    image: mongo-express:latest
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongo
+      # The ME_CONFIG_MONGODB_URL is optional if you use ME_CONFIG_MONGODB_SERVER
+      # but can be useful for more complex connection strings in the future.
+      - ME_CONFIG_MONGODB_URL=mongodb://mongo:27017/
+    depends_on:
+      - mongo
+    restart: unless-stopped
+
+volumes:
+  # Define the named volume for MongoDB data
+  mongo-data:
