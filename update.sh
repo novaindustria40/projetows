@@ -35,7 +35,9 @@ docker rm zapscale || true
 
 echo "=> [5/5] Iniciando o novo container Docker..."
 # A flag '--env-file ./.env' carrega as variáveis de ambiente (como MONGODB_URI) do arquivo .env
-docker run -d -p 80:80 --env-file ./.env --name zapscale zapscale-app
+# A flag '-p 80:3001' mapeia a porta 80 do servidor para a porta 3001 da aplicação dentro do container.
+# Se a porta 80 do seu servidor estiver ocupada, você pode mudar para outra, como '-p 8080:3001'.
+docker run -d -p 80:3001 --env-file ./.env --name zapscale zapscale-app
 
 echo ""
 echo "✅ Atualização concluída com sucesso!"
