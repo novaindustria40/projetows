@@ -91,53 +91,44 @@ Uma vez conectado à instância, você precisa instalar as dependências necess�
     git clone https://github.com/seu-usuario/seu-repositorio.git
     cd seu-repositorio # Entre no diretório do projeto
     ```
-2.  **Configurar Variáveis de Ambiente**: A aplicação precisa de um arquivo `.env` com as chaves de API e a URI do banco de dados.
-    *   Crie e edite o arquivo `.env` dentro do diretório `server`:
+2.  **Configurar Variáveis de Ambiente**: A aplicação precisa de um arquivo `.env` para carregar as variáveis de ambiente necessárias para o container Docker.
+    *   Crie e edite o arquivo `.env` no diretório **raiz** do projeto:
         ```bash
-        nano server/.env
+        nano .env
         ```
-    *   Adicione as variáveis necessárias. Exemplo:
+    *   Adicione as variáveis necessárias. O arquivo deve conter **apenas** as chaves e valores, sem aspas.
         ```env
-        # server/.env
-
-        # Porta do servidor (se não definida, usará 80)
-        PORT=80
-
-        # URI de conexão do MongoDB
-        MONGODB_URI="mongodb+srv://<user>:<password>@<cluster-url>/<database>?retryWrites=true&w=majority"
-
-        # Chave da API do Gemini
-        GEMINI_API_KEY="sua-chave-gemini-aqui"
+        # Exemplo de conteúdo para o arquivo .env
+        MONGODB_URI=mongodb+srv://<user>:<password>@<cluster-url>/<database>
+        GEMINI_API_KEY=sua-chave-gemini-aqui
         ```
-    *   Salve o arquivo (Ctrl+O) e saia (Ctrl+X).
+    *   Salve o arquivo (Ctrl+O) e saia (Ctrl+X). Este arquivo será usado pelo script de atualização para injetar as variáveis no container.
 
 ---
 
-## Passo 5: Build e Execução da Aplicação com Docker
+## Passo 5: Implantação e Atualização com o Roteiro Automatizado
 
-Com o ambiente e o código prontos, você usará o Docker para construir e rodar a aplicação.
+Para simplificar tanto a primeira implantação quanto as futuras atualizações, foi criado o roteiro `update.sh`.
 
-1.  Crie o script `build_and_run.sh`.
+1.  **Dar Permissão de Execução ao Roteiro**:
+    Antes de executar o roteiro pela primeira vez, você precisa torná-lo executável:
     ```bash
-    nano build_and_run.sh
+    chmod +x update.sh
     ```
-2.  Cole o conteúdo do script gerado, salve e feche.
-3.  Dê permissão de execução:
-    ```bash
-    chmod +x build_and_run.sh
-    ```
-4.  Execute o script para construir a imagem Docker e iniciar o container:
-    ```bash
-    ./build_and_run.sh
-    ```
-    Este script irá:
-    *   Construir a imagem Docker a partir do `Dockerfile` do projeto.
-    *   Iniciar um container a partir da imagem.
-    *   Mapear a porta 80 do container para a porta 80 da instância.
-    *   Configurar o container para reiniciar automaticamente (`--restart always`).
-    *   Mapear os diretórios `server/.wwebjs_auth` and `uploads` para persistir a sessão do WhatsApp e os arquivos de upload.
 
-5.  **Verificação**: Após a execução do script, a aplicação deve estar acessível no navegador através do endereço IP público da sua instância:
+2.  **Executar o Roteiro de Implantação/Atualização**:
+    Execute o roteiro para construir a imagem Docker, parar e remover qualquer container antigo, e iniciar um novo com as configurações corretas.
+    ```bash
+    ./update.sh
+    ```
+    O roteiro irá:
+    *   Puxar as últimas alterações do Git (`git pull`).
+    *   Verificar se o arquivo `.env` existe.
+    *   Construir a imagem Docker mais recente.
+    *   Parar e remover o container `zapscale` antigo.
+    *   Iniciar um novo container `zapscale`, injetando as variáveis de ambiente do arquivo `.env`.
+
+3.  **Verificação**: Após a execução do roteiro, a aplicação deve estar acessível no navegador através do endereço IP público da sua instância:
     `http://seu_ip_publico`
 
 ---
@@ -148,25 +139,32 @@ Aqui estão alguns comandos úteis para gerenciar o container Docker:
 
 *   **Ver logs da aplicação em tempo real**:
     ```bash
-    docker logs -f zapscale-container
+    docker logs -f zapscale
     ```
 *   **Parar o container**:
     ```bash
-    docker stop zapscale-container
+    docker stop zapscale
     ```
 *   **Iniciar o container novamente**:
     ```bash
-    docker start zapscale-container
+    docker start zapscale
+    ```
+*   **Acessar o terminal do container** (para depuração avançada):
+    ```bash
+    docker exec -it zapscale /bin/bash
     ```
 *   **Remover o container** (pare-o primeiro):
     ```bash
-    docker rm zapscale-container
+    docker rm zapscale
     ```
-*   **Remover a imagem Docker** (remova o container primeiro):
-    ```bash
-    docker rmi zapscale-app
-    ```
-*   **Para atualizar a aplicação**:
-    1.  Pare e remova o container antigo (`docker stop ...`, `docker rm ...`).
-    2.  Navegue até o diretório do projeto e puxe as atualizações (`git pull`).
-    3.  Execute o script `./build_and_run.sh` novamente.
+
+---
+
+## Para Atualizar a Aplicação
+
+O processo de atualização agora é muito simples. Basta executar o mesmo roteiro novamente no diretório do projeto:
+
+```bash
+./update.sh
+```
+Ele cuidará de todo o processo de baixar o código novo e reiniciar o container.

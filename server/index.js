@@ -10,9 +10,47 @@ const bcrypt = require('bcrypt');
 const { body, validationResult } = require('express-validator');
 const { User, Campaign, ContactList, Message, MessageTemplate } = require('./models');
 const whatsappService = require('./services/whatsapp');
+const http = require('http');
+const { Server } = require("socket.io");
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*", // Adjust for production
+    methods: ["GET", "POST"]
+  }
+});
+
 const PORT = process.env.PORT || 80;
+
+// Socket.IO connection
+io.on('connection', (socket) => {
+  console.log('a user connected');
+  
+  // Send current status on connect
+  socket.emit('status', whatsappService.getStatus());
+
+  socket.on('disconnect', () => {
+    console.log('user disconnected');
+  });
+});
+
+// Function to broadcast status updates
+function sendWhatsappStatus() {
+  const status = whatsappService.getStatus();
+  console.log(`Broadcasting status: ${status.status}`);
+  io.emit('status', status);
+}
+
+// Listen to events from whatsappService
+whatsappService.on('qr', (qr) => {
+  io.emit('qr', qr);
+});
+whatsappService.on('status', sendWhatsappStatus);
+whatsappService.on('ready', sendWhatsappStatus);
+whatsappService.on('authenticated', sendWhatsappStatus);
+whatsappService.on('disconnected', sendWhatsappStatus);
 
 // Middleware
 app.use(cors());
@@ -228,7 +266,7 @@ apiRouter.get('/dashboard/stats', async (req, res) => {
 // 2. WhatsApp Connection Routes
 apiRouter.get('/whatsapp/status', (req, res) => {
   const status = whatsappService.getStatus();
-  console.log('Status requested:', status.status);
+  console.log('Status requested via GET:', status.status);
   res.json(status);
 });
 
@@ -236,7 +274,7 @@ apiRouter.post('/whatsapp/connect', (req, res) => {
   console.log('Received connect request');
   try {
     whatsappService.initialize();
-    res.json({ message: 'Initialization started' });
+    res.json({ message: 'Initialization process started. Listening for status updates via WebSocket.' });
   } catch (error) {
     console.error('Failed to initialize WhatsApp:', error);
     res.status(500).json({ error: 'Failed to start connection' });
@@ -502,30 +540,36 @@ app.get('*', (req, res) => {
 // --- Scheduler ---
 async function runSchedulerTick() {
   const now = new Date();
-  const lookahead = new Date(now.getTime() + 60000);
+  console.log(`[Scheduler] Running tick at server time: ${now.toISOString()}`);
+  
   try {
+    // Find campaigns that are scheduled and have at least one schedule time in the past or present
     const campaigns = await Campaign.find({
       status: 'scheduled',
-      schedules: { $elemMatch: { $lte: lookahead } }
+      schedules: { $elemMatch: { $lte: now } }
     });
 
-    if (!campaigns.length) return { processed: 0 };
+    if (!campaigns.length) {
+      // console.log('[Scheduler] No due campaigns found.');
+      return { processed: 0 };
+    }
 
-    console.log(`Scheduler tick: found ${campaigns.length} campaign(s) with scheduled items <= ${lookahead.toISOString()}`);
+    console.log(`[Scheduler] Found ${campaigns.length} campaign(s) due for processing.`);
 
     for (const campaign of campaigns) {
-      console.log(`Processing campaign: ${campaign.name} (schedules: ${JSON.stringify(campaign.schedules)})`);
-      const wsStatus = whatsappService.getStatus();
-      if (!whatsappService.client || wsStatus.status !== 'connected') {
-        console.warn(`Skipping campaign ${campaign.name} - WhatsApp not connected`);
-        continue;
-      }
-
-      const dueSchedules = campaign.schedules.filter(s => new Date(s) <= lookahead);
-      const futureSchedules = campaign.schedules.filter(s => new Date(s) > lookahead);
+      const dueSchedules = campaign.schedules.filter(s => new Date(s) <= now);
+      const futureSchedules = campaign.schedules.filter(s => new Date(s) > now);
 
       if (dueSchedules.length === 0) {
-        console.log(`No due schedules for campaign ${campaign.name}`);
+        console.log(`[Scheduler] Campaign "${campaign.name}" has no due schedules at this time.`);
+        continue;
+      }
+      
+      console.log(`[Scheduler] Processing campaign "${campaign.name}" with ${dueSchedules.length} due schedule(s).`);
+
+      const wsStatus = whatsappService.getStatus();
+      if (!whatsappService.client || wsStatus.status !== 'connected') {
+        console.warn(`[Scheduler] Skipping campaign "${campaign.name}" - WhatsApp not connected.`);
         continue;
       }
 
@@ -534,18 +578,24 @@ async function runSchedulerTick() {
 
       let targets = [];
       if (campaign.targetType === 'group') {
-        targets = [{ phone: campaign.targetId, isGroup: true }];
-      } else {
+        if(campaign.targetId) {
+          targets = [{ phone: campaign.targetId, isGroup: true }];
+        }
+      } else if (campaign.targetType === 'list') {
         const list = await ContactList.findById(campaign.targetId);
         if (list && list.contacts) {
           targets = list.contacts.map(c => ({ phone: c.phone, isGroup: false }));
         }
       }
+      
+      console.log(`[Scheduler] Campaign "${campaign.name}" has ${targets.length} target(s).`);
+
 
       let sent = 0;
       let failed = 0;
 
-      for (const _due of dueSchedules) {
+      // Process for each due schedule (often just one)
+      for (const _ of dueSchedules) {
         for (const target of targets) {
           try {
             const msgObj = await whatsappService.sendMessage(target.phone, campaign.messageContent, campaign.mediaUrl);
@@ -559,9 +609,10 @@ async function runSchedulerTick() {
             });
 
             sent++;
-            await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 3000));
+            // Add a small random delay to avoid being flagged as spam
+            await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 2000));
           } catch (err) {
-            console.error(`Failed to send to ${target.phone}`, err);
+            console.error(`[Scheduler] Failed to send to ${target.phone} for campaign "${campaign.name}":`, err);
             await Message.create({
               campaignId: campaign._id,
               whatsappMessageId: `failed_${Date.now()}_${Math.random()}`,
@@ -584,22 +635,27 @@ async function runSchedulerTick() {
         campaign.status = 'completed';
         campaign.schedules = [];
       }
-
+      
+      console.log(`[Scheduler] Finished processing campaign "${campaign.name}". New status: ${campaign.status}.`);
       await campaign.save();
     }
 
     return { processed: campaigns.length };
   } catch (error) {
-    console.error('Scheduler error:', error);
-    throw error;
+    console.error('[Scheduler] Critical error in scheduler tick:', error);
+    throw error; // Rethrow to be caught by the interval wrapper
   }
 }
 
-// run every minute
+// run every 10 seconds
 setInterval(() => {
-  runSchedulerTick().catch(err => console.error('Scheduler tick failed:', err));
-}, 60000);
+  runSchedulerTick().catch(err => console.error('[Scheduler] Tick failed:', err));
+}, 10000);
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  // run every minute
+  setInterval(() => {
+    runSchedulerTick().catch(err => console.error('Scheduler tick failed:', err));
+  }, 60000);
 });

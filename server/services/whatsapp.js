@@ -18,71 +18,93 @@ class WhatsAppService extends EventEmitter {
 
   initialize() {
     if (this.client) {
-      console.log('WhatsApp client is already initialized.');
+      console.log('[whatsappService] Client is already initialized.');
       return;
     }
 
-    console.log('Initializing WhatsApp client...');
+    console.log('[whatsappService] Starting initialization...');
     this.status = 'initializing';
-    
-    this.client = new Client({
-      authStrategy: new LocalAuth({ 
-        clientId: this.userId,
-      }),
-      puppeteer: {
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--single-process',
-          '--disable-gpu'
-        ]
-      },
-    });
+    this.emit('status', this.status);
 
-    this.client.on('qr', (qr) => {
-      console.log('QR code received, generating...');
-      this.status = 'scanning';
-      this.qrCodeData = qr;
-      qrcode.generate(qr, { small: true });
-      this.emit('qr', qr);
-    });
+    try {
+      console.log('[whatsappService] Creating new Client...');
+      this.client = new Client({
+        authStrategy: new LocalAuth({ 
+          clientId: this.userId,
+        }),
+        puppeteer: {
+          headless: true,
+          executablePath: '/usr/bin/chromium',
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-gpu'
+          ],
+        },
+      });
+      console.log('[whatsappService] Client created.');
 
-    this.client.on('ready', () => {
-      console.log('WhatsApp client is ready!');
-      this.status = 'connected';
-      this.qrCodeData = null;
-      this.emit('ready');
-    });
+      console.log('[whatsappService] Attaching event listeners...');
+      this.client.on('qr', (qr) => {
+        console.log('[whatsappService] QR code received.');
+        this.status = 'scanning';
+        this.qrCodeData = qr;
+        // qrcode.generate(qr, { small: true }); // Avoid logging to console, send to frontend
+        this.emit('qr', qr);
+        this.emit('status', this.status);
+      });
 
-    this.client.on('authenticated', () => {
-      console.log('WhatsApp client is authenticated!');
-      this.status = 'connected';
-      this.qrCodeData = null;
-    });
+      this.client.on('ready', () => {
+        console.log('[whatsappService] Client is ready!');
+        this.status = 'connected';
+        this.qrCodeData = null;
+        this.emit('ready');
+        this.emit('status', this.status);
+      });
 
-    this.client.on('auth_failure', (msg) => {
-      console.error('WhatsApp authentication failure:', msg);
+      this.client.on('authenticated', () => {
+        console.log('[whatsappService] Client is authenticated!');
+        this.status = 'connected';
+        this.qrCodeData = null;
+        this.emit('authenticated');
+        this.emit('status', this.status);
+      });
+
+      this.client.on('auth_failure', (msg) => {
+        console.error('[whatsappService] Authentication failure:', msg);
+        this.status = 'disconnected';
+        this.emit('status', this.status);
+        this.destroy();
+      });
+
+      this.client.on('disconnected', (reason) => {
+        console.log('[whatsappService] Client disconnected:', reason);
+        this.status = 'disconnected';
+        this.emit('status', this.status);
+        this.destroy();
+      });
+
+      this.client.on('message_ack', (msg, ack) => {
+        this.emit('message_ack', { msg, ack });
+      });
+      console.log('[whatsappService] Event listeners attached.');
+
+      console.log('[whatsappService] Calling client.initialize()...');
+      this.client.initialize().catch(err => {
+        console.error('[whatsappService] client.initialize() failed:', err);
+        this.destroy();
+      });
+      console.log('[whatsappService] client.initialize() called.');
+
+    } catch (err) {
+      console.error('[whatsappService] Error during client instantiation:', err);
       this.destroy();
-    });
-
-    this.client.on('disconnected', (reason) => {
-      console.log('WhatsApp client disconnected:', reason);
-      this.destroy();
-    });
-
-    this.client.on('message_ack', (msg, ack) => {
-      this.emit('message_ack', { msg, ack });
-    });
-
-    this.client.initialize().catch(err => {
-      console.error('Failed to initialize WhatsApp client:', err);
-      this.destroy();
-    });
+    }
   }
 
   async logout() {

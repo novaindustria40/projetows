@@ -1,7 +1,8 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Smartphone, RefreshCw, CheckCircle2, Loader2, ShieldCheck, AlertCircle } from 'lucide-react';
 import QRCode from 'react-qr-code';
+import { io } from 'socket.io-client';
 
 const Connection: React.FC = () => {
   const [status, setStatus] = useState<'disconnected' | 'scanning' | 'connected' | 'initializing'>('disconnected');
@@ -9,45 +10,69 @@ const Connection: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lostConnection, setLostConnection] = useState(false);
-  const pollInterval = useRef<number | null>(null);
 
   const API_PREFIX = '/api';
 
-  const fetchStatus = async () => {
-    try {
-      const res = await fetch(`${API_PREFIX}/whatsapp/status`);
-      if (!res.ok) {
-        console.warn(`Failed to fetch status: ${res.status} ${res.statusText}`);
-        return;
+  useEffect(() => {
+    // Determine the WebSocket URL from the current window location
+    const socketURL = process.env.NODE_ENV === 'production' 
+      ? window.location.origin 
+      : 'http://localhost:80'; // Adjust port if your dev server runs elsewhere
+
+    const socket = io(socketURL);
+
+    socket.on('connect', () => {
+      console.log('Connected to WebSocket server');
+      // Request initial status on connection
+      fetch(`${API_PREFIX}/whatsapp/status`).then(res => res.json()).then(data => {
+        setStatus(data.status);
+        setQrCodeData(data.qrCode);
+      });
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Disconnected from WebSocket server');
+      if (status === 'connected') {
+        setLostConnection(true);
       }
-      const data = await res.json();
-      // Detecta perda de conexão
+      setStatus('disconnected');
+    });
+
+    socket.on('status', (data: { status: 'disconnected' | 'scanning' | 'connected' | 'initializing', qrCode: string | null }) => {
+      console.log('Received status update:', data.status);
       if (status === 'connected' && data.status === 'disconnected') {
         setLostConnection(true);
       }
       setStatus(data.status);
       setQrCodeData(data.qrCode);
+
       if (data.status === 'connected' || data.status === 'scanning') {
         setErrorMsg(null);
       }
-    } catch (error) {
-      console.error('Failed to fetch WhatsApp status', error);
-    }
-  };
-
-  useEffect(() => {
-    fetchStatus();
-    pollInterval.current = window.setInterval(fetchStatus, 3000); 
+    });
     
+    socket.on('qr', (qr: string) => {
+      console.log('QR code received via WebSocket');
+      setStatus('scanning');
+      setQrCodeData(qr);
+    });
+
     return () => {
-      if (pollInterval.current) clearInterval(pollInterval.current);
+      socket.disconnect();
+      socket.off('connect');
+      socket.off('disconnect');
+      socket.off('status');
+      socket.off('qr');
     };
-  }, []);
+  }, [status]); // Re-run effect if status changes to handle lost connection correctly
 
   const handleConnect = async () => {
     setIsLoading(true);
     setErrorMsg(null);
     setLostConnection(false);
+    setQrCodeData(null); // Clear old QR code
+    setStatus('initializing'); // Set status to initializing immediately
+
     try {
       const res = await fetch(`${API_PREFIX}/whatsapp/connect`, { method: 'POST' });
       if (!res.ok) {
@@ -58,17 +83,17 @@ const Connection: React.FC = () => {
           errorMessage = errorJson.error || errorMessage;
         } else {
           const errorText = await res.text();
-          if (errorText.includes('<!DOCTYPE html>')) {
-            errorMessage = `Endpoint não encontrado (${res.status}). Verifique o backend.`;
-          } else {
-            errorMessage = errorText || errorMessage;
-          }
+          errorMessage = errorText.includes('<!DOCTYPE html>') 
+            ? `Endpoint não encontrado (${res.status}). Verifique o backend.`
+            : errorText || errorMessage;
         }
         throw new Error(errorMessage);
       }
+      // No need to do anything else, WebSocket will handle the updates
     } catch (error: any) {
       console.error('Error starting connection', error);
       setErrorMsg(`Falha ao iniciar: ${error.message}`);
+      setStatus('disconnected'); // Revert status on error
     } finally {
       setIsLoading(false);
     }
