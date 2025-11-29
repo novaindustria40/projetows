@@ -1,6 +1,6 @@
 # Stage 1: Build the React frontend
 # Use a Debian-based image for better compatibility
-FROM node:18-bullseye-slim AS build
+FROM node:20-bullseye-slim AS build
 
 WORKDIR /app
 
@@ -18,7 +18,7 @@ RUN npm run build
 
 # Stage 2: Setup the production Node.js backend
 # Use the same Debian-based image
-FROM node:18-bullseye-slim
+FROM node:20-bullseye-slim
 
 WORKDIR /app
 
