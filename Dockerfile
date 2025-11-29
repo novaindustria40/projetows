@@ -48,6 +48,9 @@ COPY server/ ./server/
 # Copy the built frontend from the 'build' stage
 COPY --from=build /app/dist ./dist
 
+# Create the uploads directory and set permissions for the 'node' user
+RUN mkdir -p /app/uploads && chown -R node:node /app/uploads
+
 # Expose the port the app runs on
 EXPOSE 80
 
